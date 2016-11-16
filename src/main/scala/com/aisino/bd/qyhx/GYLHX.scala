@@ -24,17 +24,17 @@ class GYLHX(context: AppContext) extends Serializable{
 
     def gylhx(nsrHzDF: DataFrame): Unit ={
         //map(x => x(0).toString.substring(0, 2))
-        val nsrByHyDF = nsrHzDF.groupBy("hydm").count
-        val reverseNsrDF = nsrHzDF.select("hydm", "gf_nsrsbh", "xf_nsrsbh", "xxnje")
-                .toDF("hydm", "xf_nsrsbh", "gf_nsrsbh", "xxnje")
+        val nsrByHyDF = nsrHzDF.groupBy("hy_dm").count
+        val reverseNsrDF = nsrHzDF.select("hy_dm", "gf_nsrsbh", "xf_nsrsbh", "xxnje")
+                .toDF("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "xxnje")
         val unionNsrDF = nsrHzDF.union(reverseNsrDF)
                 //.filter("xf_nsrsbh = '370303749864951'").show()
 
-        /** Traverse all hydm*/
+        /** Traverse all hy_dm*/
         nsrByHyDF.collect().slice(0, 2).foreach(x => {
             println(x.toString)
-            val hydm = x(0).toString
-            pw.write(hydm + "\n")
+            val hy_dm = x(0).toString
+            pw.write(hy_dm + "\n")
             pw.flush()
             /*
             val tmp1 = unionNsrDF.select("gf_nsrsbh").rdd.map(x => x(0).toString).collect
@@ -42,8 +42,8 @@ class GYLHX(context: AppContext) extends Serializable{
             val nsrIdxMap = (tmp1 ++ tmp2).toSet.toList.zipWithIndex.toMap
             */
 
-            val xfNsrDF = unionNsrDF.filter(s"hydm = $hydm")
-                    .groupBy("hydm", "xf_nsrsbh")
+            val xfNsrDF = unionNsrDF.filter(s"hy_dm = $hy_dm")
+                    .groupBy("hy_dm", "xf_nsrsbh")
                     .pivot("gf_nsrsbh")
                     .sum("xxnje")
                     .cache()
@@ -102,9 +102,9 @@ object GYLHX {
         */
         val nsrHzDF = context.sqlContext.read.load("./data/table/nsrHzTable.parquet")
         /*
-        val func_hydm_substr2 :(String => String) = (arg : String) => arg.substring(0, 2)
-        val udf_hydm_substr2 = udf(func_hydm_substr2)
-        val nsrHzDF1 = nsrHzDF.withColumn("hydm", udf_hydm_substr2(col("hydm")))
+        val func_hy_dm_substr2 :(String => String) = (arg : String) => arg.substring(0, 2)
+        val udf_hy_dm_substr2 = udf(func_hy_dm_substr2)
+        val nsrHzDF1 = nsrHzDF.withColumn("hy_dm", udf_hy_dm_substr2(col("hy_dm")))
         */
         val gylhxObj = new GYLHX(context)
         gylhxObj.gylhx(nsrHzDF)

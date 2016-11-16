@@ -22,8 +22,8 @@ object WMQY{
         val context = new AppContext()
 
         val dataLoader = new DataLoader(context)
-        val nsrDF = dataLoader.getWmNSRData()
-
+        //val nsrDF = dataLoader.getWmNSRData()
+        val nsrDF = dataLoader.getWmNsrData()
         val wm = new WMQY(context)
         val nsrArr = wm.wmNsr(nsrDF)
         nsrArr.foreach(println)

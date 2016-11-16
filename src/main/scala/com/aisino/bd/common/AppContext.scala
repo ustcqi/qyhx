@@ -13,15 +13,16 @@ class AppContext {
             .setAppName(appName)
             //.set("spark.executor.memory", "2g")
             //.set("spark.worker.cores", "1")
-            .setMaster("local")
+            //.setMaster("local")
     val sc = new SparkContext(conf)
 
     //val sqlContext = new SQLContext(sc) //spark-2.0 deprecated
 
     val spark = SparkSession.builder()
             .appName(appName)
+            .enableHiveSupport()
             .config("spark.some.config.option", "some-value")
-            .master("local")
+            //.master("local")
             .getOrCreate()
 
     val sqlContext = spark.sqlContext

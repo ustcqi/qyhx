@@ -1,5 +1,6 @@
 package com.aisino.bd.qyhx
 
+import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.sql.DataFrame
 
@@ -19,33 +20,37 @@ class KSZZ(context: AppContext) extends Serializable{
     import spark.implicits._
 
     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Any]
-    //最近的n个月
-    val nn = 12
 
-
-    //返回值是一个DF,两列,nsrsbh  level,分别表示纳税人识别号和增长的指标
-        def kszzNsr(xxfpDF: DataFrame, jxfpDF: DataFrame, nsrDF: DataFrame) : DataFrame = {
-        val dataSummary = new DataSummary(context)
-        val nsrAyHzDF = dataSummary.nsrAyHz(xxfpDF, jxfpDF, nsrDF)
-
-        val nsrRDD = nsrAyHzDF.select("nsrsbh").map(x => x(0).toString)
-
-        val lirunDF = nsrAyHzDF.select("nsrsbh", "ny", "lirun")
-
-        //汇总时日期精确到天,然后groupby按月,sum(lirun)即可 ,备选方案
-        //某月利润为null时填充为0,不然报错
-        val df = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("lirun")
-        //val tempArr = nsrArr.slice(1, 2)
+    /**
+     * 返回值是一个DF,两列,nsrsbh  level,分别表示纳税人识别号和增长的指标
+     *  汇总时日期精确到天,然后groupby按月,sum(lirun)即可 ,备选方案
+     *  某月利润为null时填充为0,不然报错
+     *  设置不同的接口:
+     *     kszzNsr(nsrAyHzDF: DataFrame, startTime: String, numOfMonth: Int) : DataFrame 
+     *     kszznsr(nsrAyHzDF: DataFrame, deadline: String, numOfMonth: Int) : DataFrame
+     * @param nsrAyHzDF
+     * @param startTime
+     * @param endTime
+     * @return
+     */
+    def kszzNsr(nsrAyHzDF: DataFrame, startTime: String, endTime: String) : DataFrame = {
+        //filter the nsr which lirun is not null
+        val lirunDF =  nsrAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").select("nsrsbh", "ny", "lr")
+        val monthNum = lirunDF.select("ny").distinct.count.toDouble.toInt
+        val nsrHzDF = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("lr")
         var nsrList = List(("tail", 0))
-        nsrRDD.foreach(x => {
-            val nsrLirunDF = df.filter(s"nsrsbh = '${x}'")
-            val n = getMonthNum(nsrLirunDF)
-            val (nsrsbh, w) = train(nsrLirunDF, n)
+        val nsrRDD = lirunDF.select("nsrsbh").map(x => x(0).asInstanceOf[String]).distinct
+        nsrRDD.take(2).foreach(x => {
+            val nsrLrDF = nsrHzDF.filter(s"nsrsbh == ${x}")
+            //nsrLrDF.show()
+            val (nsrsbh, w) = train(nsrLrDF, monthNum)
             val level = kszzCheck(w)
+            //println("coefficient is : " + w + " and level is " + level)
             nsrList = nsrList :+ (nsrsbh, level)
         })
         nsrList = nsrList.slice(1, nsrList.length)
         val kszzNsrDF = sqlContext.createDataFrame(nsrList).toDF("nsrsbh", "level")
+        //kszzNsrDF.show
         kszzNsrDF
     }
 
@@ -55,19 +60,18 @@ class KSZZ(context: AppContext) extends Serializable{
       * @param n
       * @return List[(Int, Double)]
       */
-    def dataPreprocess(df: DataFrame, n: Int): List[(Int, Double)] = {
-        val arr = new Array[Double](n)
-        df.rdd.map(x => {
+    def dataPreprocess(df: DataFrame, n: Int): List[(Int, DenseVector)] = {
+        val arr = new Array[Double](n+1)
+        df.collect().foreach(x => {
             for(i <- 1 to n){
                 if(x(i) == null) arr(i) = 0.0
-                else arr(i) = x(i).toString.toDouble
+                else arr(i) = x(i).asInstanceOf[Double]
             }
         })
-
-        var seq = List((0, 0.0))
+        var seq = List((0, new DenseVector(Array(0.0))))
         for(i <- 1 until arr.length){
             val lirun = arr(i)
-            val tmpSeq = List((i, lirun))
+            val tmpSeq = List((i,  new DenseVector(Array(lirun))))
             seq = seq ++ tmpSeq
         }
         seq = seq.slice(1, seq.length)
@@ -86,7 +90,7 @@ class KSZZ(context: AppContext) extends Serializable{
     }
 
     /**
-      * 设df的月份固定,设为12.
+      * 假设df的月份固定,设为12.
       * +---------------+------------------+------+
         |         nsrsbh|            201511|201512|
         +---------------+------------------+------+
@@ -106,10 +110,9 @@ class KSZZ(context: AppContext) extends Serializable{
     def train(df: DataFrame, n: Int) : (String, Double) = {
         val nsrsbh = df.select("nsrsbh").toString
         val seq = dataPreprocess(df, n)
-        val trainingDataDF = sqlContext.createDataFrame(seq)
-        val lr = new LinearRegression()
-                .setMaxIter(10)
-                .setRegParam(0.2)
+        val trainingDataDF = sqlContext.createDataFrame(seq).toDF("label", "features")
+        //trainingDataDF.show()
+        val lr = new LinearRegression().setMaxIter(10).setRegParam(0.2).setLabelCol("label").setFeaturesCol("features")
         val lrModel = lr.fit(trainingDataDF)
         val coefficients = lrModel.coefficients
         val w = coefficients(0)
@@ -130,27 +133,12 @@ class KSZZ(context: AppContext) extends Serializable{
 object  KSZZ{
     def main(args: Array[String]) {
         val context = new AppContext()
-
         val dataLoader = new DataLoader(context)
-        val xxfpDF = dataLoader.getXXFPData()
-        val jxfpDF = dataLoader.getJXFPData()
-        val nsrDF = dataLoader.getNSRData()
-
+        val nsrAyHzDF = dataLoader.getNsrAyHz()
         val kszz = new KSZZ(context)
-        val df = kszz.kszzNsr(xxfpDF, jxfpDF, nsrDF)
+        val startTime = "201201"
+        val endTime = "201312"
+        val df = kszz.kszzNsr(nsrAyHzDF, startTime, endTime)
         context.sc.stop()
     }
 }
-/*
-913201045980263435
-913201046637920109
-91320104671337261X
-91320104724568582B
-913201047260701040
-9132010472608483XW
-91320104733167254P
-91320104736070511G
-91320104736077465Y
-91320104754117328A
-91320104756874760K
- */

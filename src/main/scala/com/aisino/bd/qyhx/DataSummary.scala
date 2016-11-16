@@ -24,15 +24,15 @@ class DataSummary(context: AppContext){
 
         val xxDF = xxfpNsrDF.groupBy("nsrsbh", "hy_dm", "kprq")
                 .sum("je")
-                .toDF("nsrsbh", "hydm", "ny", "xxyje")
+                .toDF("nsrsbh", "hy_dm", "ny", "xxyje")
         val jxDF = jxfpNsrDF.groupBy("nsrsbh", "hy_dm", "kprq")
                 .sum("je")
-                .toDF("nsrsbh", "hydm", "ny", "jxyje")
+                .toDF("nsrsbh", "hy_dm", "ny", "jxyje")
         xxDF.createOrReplaceTempView("xxtmpT")
         jxDF.createOrReplaceTempView("jxtmpT")
 
         val nsrAyHzDF = sqlContext.sql(
-            "select  x.nsrsbh, x.hydm , x.ny, x.xxyje as xxje, j.jxyje as jxje, " +
+            "select  x.nsrsbh, x.hy_dm , x.ny, x.xxyje as xxje, j.jxyje as jxje, " +
                     "(x.xxyje - j.jxyje) as lirun " +
                     "from xxtmpT x, jxtmpT j where x.nsrsbh = j.nsrsbh and x.ny = j.ny")
         nsrAyHzDF
@@ -47,8 +47,8 @@ class DataSummary(context: AppContext){
     def hyAyHz(xxfpDF: DataFrame, jxfpDF: DataFrame, nsrDF: DataFrame): DataFrame = {
         val ayhzDF = nsrAyHz(xxfpDF, jxfpDF, nsrDF)
         ayhzDF.createOrReplaceTempView("nsrAyHzT")
-        val hyAyHzDF = sqlContext.sql("select hydm, ny, sum(xxje) as hyyxx, sum(jxje) as hyyjx " +
-                "from nsrAyHzT group by hydm, ny order by ny")
+        val hyAyHzDF = sqlContext.sql("select hy_dm, ny, sum(xxje) as hyyxx, sum(jxje) as hyyjx " +
+                "from nsrAyHzT group by hy_dm, ny order by ny")
         hyAyHzDF
     }
 
@@ -59,10 +59,10 @@ class DataSummary(context: AppContext){
                .filter("hy_dm = ''")
        val xxRestDF = xxfpNsrRestDF.groupBy("xf_nsrsbh", "gf_nsrsbh", "kprq")
                .sum("je")
-               .toDF("xf_nsrsbh", "gf_nsrsbh", "hydm", "ny", "xxyje")
+               .toDF("xf_nsrsbh", "gf_nsrsbh", "hy_dm", "ny", "xxyje")
        val jxRestDF = jxfpNsrRestDF.groupBy("nsrsbh", "kprq")
                .sum("je")
-               .toDF("gf_nsrsbh", "xf_nsrsbh", "hydm", "ny", "jxyje")
+               .toDF("gf_nsrsbh", "xf_nsrsbh", "hy_dm", "ny", "jxyje")
 
        */
     /**
@@ -78,18 +78,18 @@ class DataSummary(context: AppContext){
                 .filter("hy_dm != ''")
         val xxDF = xxfpNsrDF.groupBy("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "kprq")
                 .sum("je")
-                .toDF("hydm", "xf_nsrsbh", "gf_nsrsbh", "ny", "xxyje")
+                .toDF("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "ny", "xxyje")
         val jxDF = jxfpNsrDF.groupBy("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "kprq")
                 .sum("je")
-                .toDF("hydm", "gf_nsrsbh", "xf_nsrsbh", "ny", "jxyje")
+                .toDF("hy_dm", "gf_nsrsbh", "xf_nsrsbh", "ny", "jxyje")
         //xxDF.printSchema()
         xxDF
     }
 
     def nsrToNsrHz(df: DataFrame): DataFrame = {
-        val anHzDF = df.groupBy("hydm", "xf_nsrsbh", "gf_nsrsbh")
+        val anHzDF = df.groupBy("hy_dm", "xf_nsrsbh", "gf_nsrsbh")
                 .sum("xxyje")
-                .toDF("hydm", "xf_nsrsbh", "gf_nsrsbh", "xxnje")
+                .toDF("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "xxnje")
         //anHzDF.printSchema()
         //anHzDF.show()
         anHzDF

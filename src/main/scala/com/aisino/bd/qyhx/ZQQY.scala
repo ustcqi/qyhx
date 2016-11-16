@@ -13,18 +13,16 @@ class ZQQY(context: AppContext) {
 
     val k = List(3, 6, 12)
 
-    //取数据时要全年的,例如一年,两年,某月没数据的填充为0
+    //取数据时要全年的,例如一年,两年,某月没数据的填
     /**
-      * 计算求得周期性企业
-      * @param xxfpDF
-      * @param jxfpDF
-      * @param nsrDF
-      * @return zqNsrDF
-      */
-    def zqNsr(xxfpDF: DataFrame, jxfpDF: DataFrame, nsrDF: DataFrame) : DataFrame = {
-        val dataSummary = new DataSummary(context)
-        val nsrAyHzDF = dataSummary.nsrAyHz(xxfpDF, jxfpDF, nsrDF)
-        val lirunDF = nsrAyHzDF.select("nsrsbh", "ny", "lirun")
+     * @param nsrAyHzDF
+     * @param startTime
+     * @param endTime
+     * @param k
+     * @return
+     */
+    def zqNsr(nsrAyHzDF: DataFrame, startTime: String, endTime: String, k: Int) : DataFrame = {
+        val lirunDF = nsrAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").select("nsrsbh", "ny", "lr")
         /* | nsrsbh  ny         lirun |
         *    12e43   2016-01    23.0
         *
@@ -37,7 +35,7 @@ class ZQQY(context: AppContext) {
         *   123       23.0       34.0
         *
         * */
-        val df = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("lirun")
+        val df = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("lr")
 
         //transfer a rdd row to DenseVector and then compute the autocorrelation
         val nsrCorrelationRDD = df.rdd.map(x => {
@@ -48,7 +46,7 @@ class ZQQY(context: AppContext) {
                 else arr(i-1) = x(i).toString.toDouble
             }
             //k=1, k<n
-            val r = ZQNSR.autocorrelation(arr, 1)
+            val r = ZQNSR.autocorrelation(arr, k)
             Row(x(0), r)
         })
 
@@ -86,17 +84,22 @@ object ZQNSR{
     }
 
     def main(args: Array[String]) {
+        //input args
         val context = new AppContext()
 
         val dataLoader = new DataLoader(context)
-        val xxfpDF = dataLoader.getXXFPData()
-        val jxfpDF = dataLoader.getJXFPData()
-        val nsrDF = dataLoader.getNSRData()
 
+        val nsrAyHzDF = dataLoader.getNsrAyHz()
         val zqqy = new ZQQY(context)
-        val zqNsrDF = zqqy.zqNsr(xxfpDF, jxfpDF, nsrDF)
+        val startTime = "201201"
+        val endTime = "201312"
+        val k = 12
+        val zqNsrDF = zqqy.zqNsr(nsrAyHzDF, startTime, endTime, k)
         zqNsrDF.printSchema()
-        zqNsrDF.show()
+        zqNsrDF.filter("coefficient > 0.3").show()
+        val efficients = List(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)
+        efficients.foreach(x => println(zqNsrDF.filter(s"coefficient > $x").count))
+
         context.sc.stop()
     }
 }
