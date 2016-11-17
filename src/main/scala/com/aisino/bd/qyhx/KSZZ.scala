@@ -34,89 +34,44 @@ class KSZZ(context: AppContext) extends Serializable{
      * @return
      */
     def kszzNsr(nsrAyHzDF: DataFrame, startTime: String, endTime: String) : DataFrame = {
-        //filter the nsr which lirun is not null
         val lirunDF =  nsrAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").select("nsrsbh", "ny", "lr")
         val monthNum = lirunDF.select("ny").distinct.count.toDouble.toInt
         val nsrHzDF = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("lr")
-        var nsrList = List(("tail", 0))
-        val nsrRDD = lirunDF.select("nsrsbh").map(x => x(0).asInstanceOf[String]).distinct
-        nsrRDD.take(2).foreach(x => {
-            val nsrLrDF = nsrHzDF.filter(s"nsrsbh == ${x}")
-            //nsrLrDF.show()
-            val (nsrsbh, w) = train(nsrLrDF, monthNum)
-            val level = kszzCheck(w)
-            //println("coefficient is : " + w + " and level is " + level)
-            nsrList = nsrList :+ (nsrsbh, level)
+        var nsrList = List(("tail", 0.0))
+        nsrHzDF.collect().foreach(x => {
+            val nsrsbh = x(0).toString
+            val arr =  x.toSeq.toArray.slice(1, monthNum + 1)
+
+            if(! arr.contains(null)){
+                val w = train(arr, monthNum)
+                val level = kszzCheck(w)
+                nsrList = nsrList :+ (nsrsbh, w)
+            }
         })
         nsrList = nsrList.slice(1, nsrList.length)
         val kszzNsrDF = sqlContext.createDataFrame(nsrList).toDF("nsrsbh", "level")
-        //kszzNsrDF.show
         kszzNsrDF
     }
 
-
-    /**
-      * @param df
-      * @param n
-      * @return List[(Int, Double)]
-      */
-    def dataPreprocess(df: DataFrame, n: Int): List[(Int, DenseVector)] = {
-        val arr = new Array[Double](n+1)
-        df.collect().foreach(x => {
-            for(i <- 1 to n){
-                if(x(i) == null) arr(i) = 0.0
-                else arr(i) = x(i).asInstanceOf[Double]
-            }
-        })
-        var seq = List((0, new DenseVector(Array(0.0))))
-        for(i <- 1 until arr.length){
-            val lirun = arr(i)
+    def getTrainData(arr: Array[Any], n: Int): List[(Int, DenseVector)] = {
+        var seq = List((1, new DenseVector(Array(1.0))))
+        for(i <- 2 until (arr.length+1)){
+            val lirun = arr(i-1).asInstanceOf[Double]
             val tmpSeq = List((i,  new DenseVector(Array(lirun))))
             seq = seq ++ tmpSeq
         }
-        seq = seq.slice(1, seq.length)
+        //seq = seq.slice(1, seq.length)
         seq
     }
 
-    /**
-      * 获取DF中纳税人的月份数
-      * @param df
-      * @return
-      */
-    def getMonthNum(df: DataFrame) : Int = {
-        val len = df.columns.length
-        //去掉纳税人一列,剩下的是月份数
-        len - 1
-    }
-
-    /**
-      * 假设df的月份固定,设为12.
-      * +---------------+------------------+------+
-        |         nsrsbh|            201511|201512|
-        +---------------+------------------+------+
-        |370102307138004|261782.09000000003|  null|
-        +---------------+------------------+------+
-
-        则将df转为12行的df,nsrsbh=370102307138004,例如
-        +---------------+------------------+------+
-        |            201511|261782.09000000003|
-        +---------------+------------------+------+
-        |            201512|  null|
-        +---------------+------------------+
-
-        又由于df中月份是连续的(根据实际情况分析,可以验证下),因此可以忽略月份维度
-        建立模型 y = w*x,其中y是利润,x是月份,w是权重,求得的w即为参数,也就是斜率
-      */
-    def train(df: DataFrame, n: Int) : (String, Double) = {
-        val nsrsbh = df.select("nsrsbh").toString
-        val seq = dataPreprocess(df, n)
+    def train(arr: Array[Any], n: Int) : Double = {
+        val seq = getTrainData(arr, n)
         val trainingDataDF = sqlContext.createDataFrame(seq).toDF("label", "features")
-        //trainingDataDF.show()
-        val lr = new LinearRegression().setMaxIter(10).setRegParam(0.2).setLabelCol("label").setFeaturesCol("features")
+        val lr = new LinearRegression().setMaxIter(300).setRegParam(0.1).setLabelCol("label").setFeaturesCol("features")
         val lrModel = lr.fit(trainingDataDF)
         val coefficients = lrModel.coefficients
         val w = coefficients(0)
-        (nsrsbh, w)
+        w.formatted("%.8f").toDouble
     }
 
     //根据实验结果调整
@@ -131,14 +86,29 @@ class KSZZ(context: AppContext) extends Serializable{
 }
 
 object  KSZZ{
+    val usage =
+        """Usage:
+	            args(0): startTime
+			    args(1): endTime
+
+			 example:
+	            201201 201312
+        """.stripMargin.trim
     def main(args: Array[String]) {
+        if(args.length < 2){
+            println(usage)
+            sys.exit(1)
+        }
+        val startTime = args(0)
+        val endTime = args(1)
+
         val context = new AppContext()
         val dataLoader = new DataLoader(context)
         val nsrAyHzDF = dataLoader.getNsrAyHz()
         val kszz = new KSZZ(context)
-        val startTime = "201201"
-        val endTime = "201312"
         val df = kszz.kszzNsr(nsrAyHzDF, startTime, endTime)
+        //df.show()
+        df.orderBy("level").collect().foreach(println)
         context.sc.stop()
     }
 }

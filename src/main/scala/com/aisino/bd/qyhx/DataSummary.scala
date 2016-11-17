@@ -52,19 +52,6 @@ class DataSummary(context: AppContext){
         hyAyHzDF
     }
 
-    /*
-       val xxfpNsrRestDF = xxfpDF.join(nsrDF, xxfpDF("xf_nsrsbh") === nsrDF("nsrsbh"), "inner")
-               .filter("hy_dm = ''")
-       val jxfpNsrRestDF = jxfpDF.join(nsrDF, jxfpDF("gf_nsrsbh") === nsrDF("nsrsbh"), "inner")
-               .filter("hy_dm = ''")
-       val xxRestDF = xxfpNsrRestDF.groupBy("xf_nsrsbh", "gf_nsrsbh", "kprq")
-               .sum("je")
-               .toDF("xf_nsrsbh", "gf_nsrsbh", "hy_dm", "ny", "xxyje")
-       val jxRestDF = jxfpNsrRestDF.groupBy("nsrsbh", "kprq")
-               .sum("je")
-               .toDF("gf_nsrsbh", "xf_nsrsbh", "hy_dm", "ny", "jxyje")
-
-       */
     /**
       * nsr <-> nsr 利润 进项 销项 按月汇总表
       * @param xxfpDF
