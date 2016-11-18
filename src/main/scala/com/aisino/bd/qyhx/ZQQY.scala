@@ -1,5 +1,7 @@
 package com.aisino.bd.qyhx
 
+import com.aisino.bd.common.SchemaUtil
+import com.aisino.bd.qyhx.common.DateUtil
 import com.aisino.bd.qyhx.math.MathUtils
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types._
@@ -24,7 +26,7 @@ class ZQQY(context: AppContext) {
      * @param k
      * @return
      */
-    def zqNsr(nsrAyHzDF: DataFrame, startTime: String, endTime: String, k: Int) : DataFrame = {
+    def zqNsr(nsrAyHzDF: DataFrame, startTime: String, endTime: String, k: Int, ratio: Double) : DataFrame = {
         val lirunDF = nsrAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").select("nsrsbh", "ny", "lr")
         val df = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("lr")
         val nsrCorrelationRDD = df.rdd.map(x => {
@@ -45,46 +47,51 @@ class ZQQY(context: AppContext) {
                     :: Nil)
         val zqNsrDF = sqlContext.createDataFrame(nsrCorrelationRDD, schema)
                 .toDF("nsrsbh", "coefficient")
-        zqNsrDF
+
+        topZqNsrByRatio(zqNsrDF, ratio, endTime)
     }
 
-    def topZqNsrByRatio(zqNsrDF: DataFrame, ratio: Double): Array[(String, Double)] ={
+    def topZqNsrByRatio(zqNsrDF: DataFrame, ratio: Double, endTime: String): DataFrame ={
         val convertedRDD = zqNsrDF.filter("coefficient > 0.0").rdd.map(x => {
             (x(0).toString, x(1).asInstanceOf[Double])
         })
         val zqNsrArr =  convertedRDD.collect().filter(! _._2.isNaN)
         val count = zqNsrArr.length
         val idx = (count * ratio).toInt
-        zqNsrArr.sortBy(_._2).slice(count - idx, count)
+        val arr = zqNsrArr.sortBy(_._2).slice(count - idx, count)
+        val currentTime = DateUtil.getCurrentTime()
+        val rdd =  spark.sparkContext.parallelize(arr).map(x => Row(x._1.toString, 4.toString, 1, endTime, null, currentTime))
+        val schema = SchemaUtil.nsrBqSchema
+        val df = spark.createDataFrame(rdd, schema)
+        df
     }
 }
 
 object ZQNSR{
 
     val usage =
-		"""Usage: \n\t args(0): startTime \n\t args(1): endTime \n\t args(2): k
+		"""Usage: \n\t args(0): startTime \n\t args(1): endTime \n\t args(2): k \ n\t args(3) ratio
 
-			 example: 201201 201312 12
+			 example: 201201 201312 12 0.2
 		""".stripMargin.trim
     def main(args: Array[String]) {
-        if(args.length < 3){
+        if(args.length < 4){
             println(usage)
             sys.exit(1)
         }
         val startTime = args(0)
         val endTime = args(1)
         val k = args(2).toInt
-        //input args
+        val ratio = args(3).toDouble
+
         val context = new AppContext()
         val dataLoader = new DataLoader(context)
         val nsrAyHzDF = dataLoader.getNsrAyHz()
         val zqqy = new ZQQY(context)
 
-        val zqNsrDF = zqqy.zqNsr(nsrAyHzDF, startTime, endTime, k)
-        val topCorrNsr = zqqy.topZqNsrByRatio(zqNsrDF, 0.2)
-        topCorrNsr.foreach(println)
-        println(topCorrNsr.length)
-        //test(zqNsrDF)
+        val zqNsrDF = zqqy.zqNsr(nsrAyHzDF, startTime, endTime, k, ratio)
+        zqNsrDF.write.mode("append").saveAsTable("dw_bak1.dw_dm_nsr_bq")
+
         context.sc.stop()
     }
 

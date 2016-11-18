@@ -1,5 +1,7 @@
 package com.aisino.bd.qyhx
 
+import com.aisino.bd.common.SchemaUtil
+import com.aisino.bd.qyhx.common.DateUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -9,56 +11,9 @@ import org.apache.spark.sql.types._
   */
 class HYLT(context: AppContext) extends Serializable{
     @transient
-    val sqlContext = context.sqlContext
-    @transient
     val spark = context.spark
 
-    val n = 5
-
-    def hyLtNsr(nsrAyHzDF: DataFrame, hyAyHzDF: DataFrame): DataFrame ={
-        nsrAyHzDF.createOrReplaceTempView("nsrAyHzT")
-        hyAyHzDF.createOrReplaceTempView("hyAyHzT")
-
-        val DF = sqlContext.sql("select n.hy_dm, n.nsrsbh, n.ny, n.xxje, n.jxje, h.xxje as hyxxje, " +
-                "n.jxje, h.jxje as hyjxje " +
-                "from nsrAyHzT n, hyAyHzT h where n.hy_dm = h.hy_dm and n.ny = h.ny")
-        DF.createOrReplaceTempView("nsrhyT")
-        //DF.show()
-
-        val tmpDF = sqlContext.sql("select nsrsbh, hy_dm, sum(xxje) as zxxje, sum(jxje) as zjxje, " +
-                "sum(hyxxje) as hyzxxje, sum(hyjxje) as hyzjxje " +
-                "from nsrhyT group by nsrsbh, hy_dm")
-        tmpDF.createOrReplaceTempView("nsrhyhzT")
-
-        val hzDF = sqlContext.sql("select nsrsbh, hy_dm, (zxxje/hyzxxje) as xxbl from nsrhyhzT")
-        //hzDF.rdd.take(5).foreach(println)
-
-        //(hy_dm, (xxbl, nsrsbh))
-        val rdd = hzDF.rdd.map(x => (x(1).asInstanceOf[String], (x(2).asInstanceOf[Double], x(0).asInstanceOf[String])))
-        rdd.take(5).foreach(println)
-
-        import org.apache.spark.mllib.rdd.MLPairRDDFunctions.fromPairRDD
-        val ltqyRDD = rdd.topByKey(n) (Ordering.by[(Double, String), Double](_._1))
-                .map(x => Row(x._1, x._2(0)._2, x._2(0)._1))
-        ltqyRDD.take(5).foreach(println)
-        //println(retRDD.map(x => x._1).count(), retRDD.map(x => x._1).distinct.count())
-
-        val schema = StructType(
-            StructField("hy_dm", StringType, true)
-                    :: StructField("nsrsbh", StringType, true)
-                    :: StructField("xxbl", DoubleType, true)
-                    :: Nil)
-        val ltqyDF = spark.createDataFrame(ltqyRDD, schema).toDF("hy_dm", "nsrsbh", "xxbl")
-        ltqyDF
-          /*
-        val tmpDF2 = sqlContext.sql("select gf_nsrsbh, je from (select gf_nsrsbh, je,
-        row_number() OVER (PARTITION BY gf_nsrsbh ORDER BY je DESC) rank from dw_fact_jxfp) tmp
-        where rank<=3")
-        */
-
-    }
-
-    def hyLtNsrByTime(nsrAyHzDF: DataFrame, hyAyHzDF: DataFrame, startTime: String, endTime: String): DataFrame ={
+    def hyLtNsr(nsrAyHzDF: DataFrame, hyAyHzDF: DataFrame, startTime: String, endTime: String,  n: Int): DataFrame ={
         nsrAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").createOrReplaceTempView("nsrAyHzT")
         hyAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").createOrReplaceTempView("hyAyHzT")
 
@@ -78,18 +33,21 @@ class HYLT(context: AppContext) extends Serializable{
         val rdd = hzDF.rdd.map(x => (x(1).asInstanceOf[String], (x(2).asInstanceOf[Double], x(0).asInstanceOf[String])))
 
         import org.apache.spark.mllib.rdd.MLPairRDDFunctions.fromPairRDD
-        val ltqyRDD = rdd.topByKey(n)(Ordering.by[(Double, String), Double](_._1))
-            .map(x => Row(x._1, x._2(0)._2, x._2(0)._1))
-
+        /*
         val schema = StructType(
             StructField("hy_dm", StringType, true)
-                :: StructField("nsrsbh", StringType, true)
+                :: StructField("nsrsbh", StringType, false)
                 :: StructField("xxbl", DoubleType, true)
                 :: Nil)
-        val ltqyDF = spark.createDataFrame(ltqyRDD, schema).toDF("hy_dm", "nsrsbh", "xxbl")
-        rdd.take(5).foreach(println)
-        println("---------------------------------------")
-        ltqyRDD.take(5).foreach(println)
+        val ltqyRDD = rdd.topByKey(n)(Ordering.by[(Double, String), Double](_._1))
+            .map(x => Row(x._1, x._2(0)._2, x._2(0)._1))
+        */
+        val currentTime = DateUtil.getCurrentTime()
+        val ltqyRDD = rdd.topByKey(n)(Ordering.by[(Double, String), Double](_._1))
+            .map(x => Row(x._2(0)._2.toString, 6.toString, 1, endTime, null, currentTime))
+
+        val schema = SchemaUtil.nsrBqSchema
+        val ltqyDF = spark.createDataFrame(ltqyRDD, schema)
         ltqyDF
     }
 }
@@ -99,9 +57,9 @@ object HYLT{
         """Usage:
 	            args(0): startTime
 			    args(1): endTime
-
+                args(2): n
 			 example:
-	            201201 201312
+	            201201 201312 5
         """.stripMargin.trim
     def main(args: Array[String]) {
         if(args.length < 2){
@@ -110,6 +68,7 @@ object HYLT{
         }
         val startTime = args(0)
         val endTime = args(1)
+        val n = args(2).toInt
 
         val context = new AppContext()
 
@@ -119,7 +78,8 @@ object HYLT{
         val hyAyHzDF = dataLoader.getHyAyHz()
         val hylt = new HYLT(context)
         //val hyltDF = hylt.hyLtNsr(nsrAyHzDF, hyAyHzDF)
-        val hyltDF = hylt.hyLtNsrByTime(nsrAyHzDF, hyAyHzDF, startTime, endTime)
+        val hyltDF = hylt.hyLtNsr(nsrAyHzDF, hyAyHzDF, startTime, endTime, n)
+        hyltDF.write.mode("append").saveAsTable("dw_bak1.dw_dm_nsr_bq")
         //hyltDF.show()
         context.sc.stop()
     }
