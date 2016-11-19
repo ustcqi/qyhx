@@ -44,7 +44,7 @@ class HYLT(context: AppContext) extends Serializable{
         */
         val currentTime = DateUtil.getCurrentTime()
         val ltqyRDD = rdd.topByKey(n)(Ordering.by[(Double, String), Double](_._1))
-            .map(x => Row(x._2(0)._2.toString, 6.toString, 1, endTime, null, currentTime))
+            .map(x => Row(x._2(0)._2.toString, 6.toString, x._2(0)._1.toString, endTime, null, currentTime))
 
         val schema = SchemaUtil.nsrBqSchema
         val ltqyDF = spark.createDataFrame(ltqyRDD, schema)
@@ -58,17 +58,19 @@ object HYLT{
 	            args(0): startTime
 			    args(1): endTime
                 args(2): n
+				args(3): tableName
 			 example:
-	            201201 201312 5
+	            201201 201312 5 dw_bak1.dw_dm_nsr_bq1
         """.stripMargin.trim
     def main(args: Array[String]) {
-        if(args.length < 2){
+        if(args.length < 4){
             println(usage)
             sys.exit(1)
         }
         val startTime = args(0)
         val endTime = args(1)
         val n = args(2).toInt
+        val tableName = args(3)
 
         val context = new AppContext()
 
@@ -79,7 +81,7 @@ object HYLT{
         val hylt = new HYLT(context)
         //val hyltDF = hylt.hyLtNsr(nsrAyHzDF, hyAyHzDF)
         val hyltDF = hylt.hyLtNsr(nsrAyHzDF, hyAyHzDF, startTime, endTime, n)
-        hyltDF.write.mode("append").saveAsTable("dw_bak1.dw_dm_nsr_bq")
+        hyltDF.write.mode("append").saveAsTable(tableName)
         //hyltDF.show()
         context.sc.stop()
     }

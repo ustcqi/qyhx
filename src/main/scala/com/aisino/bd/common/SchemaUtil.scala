@@ -9,7 +9,7 @@ object SchemaUtil {
 	val nsrBqSchema = StructType(
 		StructField("nsr_key", StringType, false)
 			:: StructField("bq_key", StringType, false)
-			:: StructField("bq_value", IntegerType, false)
+			:: StructField("bq_value", StringType, false)
 			:: StructField("bq_start_time", StringType, false)
 			:: StructField("bq_end_time", StringType, true)
 			:: StructField("tag_time", StringType, false)

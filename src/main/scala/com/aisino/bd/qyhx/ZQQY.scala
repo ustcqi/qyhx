@@ -60,7 +60,7 @@ class ZQQY(context: AppContext) {
         val idx = (count * ratio).toInt
         val arr = zqNsrArr.sortBy(_._2).slice(count - idx, count)
         val currentTime = DateUtil.getCurrentTime()
-        val rdd =  spark.sparkContext.parallelize(arr).map(x => Row(x._1.toString, 4.toString, 1, endTime, null, currentTime))
+        val rdd =  spark.sparkContext.parallelize(arr).map(x => Row(x._1.toString, 4.toString, x._2.toString, endTime, null, currentTime))
         val schema = SchemaUtil.nsrBqSchema
         val df = spark.createDataFrame(rdd, schema)
         df
@@ -70,12 +70,17 @@ class ZQQY(context: AppContext) {
 object ZQNSR{
 
     val usage =
-		"""Usage: \n\t args(0): startTime \n\t args(1): endTime \n\t args(2): k \ n\t args(3) ratio
+		"""Usage:
+	         args(0): startTime
+	         args(1): endTime
+	         args(2): k
+	         args(3): ratio
+		     args(4): table
 
-			 example: 201201 201312 12 0.2
+			 example: 201201 201312 12 0.2 dw_bak1.dw_dm_nsr_bq1
 		""".stripMargin.trim
     def main(args: Array[String]) {
-        if(args.length < 4){
+        if(args.length < 5){
             println(usage)
             sys.exit(1)
         }
@@ -83,6 +88,7 @@ object ZQNSR{
         val endTime = args(1)
         val k = args(2).toInt
         val ratio = args(3).toDouble
+        val tableName = args(4)
 
         val context = new AppContext()
         val dataLoader = new DataLoader(context)
@@ -90,7 +96,7 @@ object ZQNSR{
         val zqqy = new ZQQY(context)
 
         val zqNsrDF = zqqy.zqNsr(nsrAyHzDF, startTime, endTime, k, ratio)
-        zqNsrDF.write.mode("append").saveAsTable("dw_bak1.dw_dm_nsr_bq")
+        zqNsrDF.write.mode("append").saveAsTable(tableName)
 
         context.sc.stop()
     }

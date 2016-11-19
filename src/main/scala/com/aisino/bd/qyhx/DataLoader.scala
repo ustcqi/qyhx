@@ -79,17 +79,18 @@ class DataLoader(context: AppContext){
     }
 
     def getNsrData(): DataFrame = {
-        val nsrDF = spark.sql("select rowkey as nsrsbh, nsrxx['hy_dm'] as hy_dm from dw.dw_hbase_nsr_ei")
+        //val nsrDF = spark.sql("select rowkey as nsrsbh, nsrxx['hy_dm'] as hy_dm from dw.dw_hbase_nsr_ei")
+        val nsrDF = spark.sql("select rowkey as nsrsbh, nsrkz['hymx_dm'] as hy_dm from dw.dw_hbase_nsr_ei where nsrkz['hymx_dm'] = ''")
         nsrDF
     }
 
     def getWmNsrData(): DataFrame = {
-        val wmNsrDF = spark.sql("select rowkey as nsrsbh, nsrxx['hy_dm'] as hy_dm from dw.dw_hbase_nsr_ei where ckts['nsrdj_no'] != ''")
+        val wmNsrDF = spark.sql("select rowkey as nsrsbh from dw.dw_hbase_nsr_ei where ckts['nsrdj_no'] != '' ")
         wmNsrDF
     }
 
     def getNsrAyHz() : DataFrame = {
-        val nsrAyHzDF = spark.sql("select hy_key as hy_dm , nsr_key as nsrsbh, date_key as ny, lr, jxje, xxje from dw_bak1.dw_agg_hy_nsr")
+        val nsrAyHzDF = spark.sql("select hy_key as hy_dm, nsr_key as nsrsbh, date_key as ny, lr, jxje, xxje from dw_bak1.dw_agg_hy_nsr")
         nsrAyHzDF
     }
 

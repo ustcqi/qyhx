@@ -24,11 +24,11 @@ class KSZZ(context: AppContext) extends Serializable{
     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Any]
 
 
-    def getTrainData(arr: Array[Any], n: Int): List[(Int, DenseVector)] = {
-        var seq = List((1, new DenseVector(Array(1.0))))
+    def getTrainData(arr: Array[Any], n: Int): List[(Double, DenseVector)] = {
+        var seq = List((1.0, new DenseVector(Array(0))))
         for(i <- 2 until (arr.length+1)){
             val lirun = arr(i-1).asInstanceOf[Double]
-            val tmpSeq = List((i,  new DenseVector(Array(lirun))))
+            val tmpSeq = List((lirun.formatted("%.6f").toDouble,  new DenseVector(Array(i))))
             seq = seq ++ tmpSeq
         }
         //seq = seq.slice(1, seq.length)
@@ -38,11 +38,11 @@ class KSZZ(context: AppContext) extends Serializable{
     def train(arr: Array[Any], n: Int) : Double = {
         val seq = getTrainData(arr, n)
         val trainingDataDF = sqlContext.createDataFrame(seq).toDF("label", "features")
-        val lr = new LinearRegression().setMaxIter(1000).setRegParam(0.05).setLabelCol("label").setFeaturesCol("features")
+        val lr = new LinearRegression().setMaxIter(500).setRegParam(0.1).setLabelCol("label").setFeaturesCol("features")
         val lrModel = lr.fit(trainingDataDF)
         val coefficients = lrModel.coefficients
         val w = coefficients(0)
-        w.formatted("%.8f").toDouble
+        w.formatted("%.6f").toDouble
     }
 
     //根据实验结果调整
@@ -86,12 +86,12 @@ class KSZZ(context: AppContext) extends Serializable{
         val len = nsrList.length-1
         val idx = (len * ratio).toInt
         nsrList = nsrList.slice(1, nsrList.length).sortBy(_._2).slice(len-idx, len)
-        val kszzNsrDF = sqlContext.createDataFrame(nsrList).toDF("nsrsbh", "level").filter("level >= 0.0")
+        //val kszzNsrDF = sqlContext.createDataFrame(nsrList).toDF("nsrsbh", "level").filter("level >= 0.0")
         val currentTime = DateUtil.getCurrentTime()
-        val rdd =  spark.sparkContext.parallelize(nsrList).map(x => Row(x._1.toString, 2.toString, 1, endTime, null, currentTime))
+        val rdd =  spark.sparkContext.parallelize(nsrList).map(x => Row(x._1.toString, 2.toString, x._2.toString, endTime, null, currentTime))
         val schema = SchemaUtil.nsrBqSchema
         val df = spark.createDataFrame(rdd, schema)
-        kszzNsrDF
+        df
     }
 }
 
@@ -100,24 +100,27 @@ object  KSZZ{
         """Usage:
 	            args(0): startTime
 			    args(1): endTime
-
+                args(2): ratio
+				args(3): table
 			 example:
-	            201201 201312
+	            201201 201312 0.2 dw_bak1.dw_dm_nsr_bq1
         """.stripMargin.trim
     def main(args: Array[String]) {
-        if(args.length < 3){
+        if(args.length < 4){
             println(usage)
             sys.exit(1)
         }
         val startTime = args(0)
         val endTime = args(1)
         val ratio = args(2).toDouble
+        val tableName = args(3)
+
         val context = new AppContext()
         val dataLoader = new DataLoader(context)
         val nsrAyHzDF = dataLoader.getNsrAyHz()
         val kszz = new KSZZ(context)
         val df = kszz.kszzNsr(nsrAyHzDF, startTime, endTime, ratio)
-        df.write.mode("append").saveAsTable("dw_bak1.dw_dm_nsr_bq")
+        df.write.mode("append").saveAsTable(tableName)
         //df.write.mode("append").saveAsTable("dw_bak1.dw_dm_nsr_bq")
         //df.show()
         //df.orderBy("level").collect().foreach(println)
