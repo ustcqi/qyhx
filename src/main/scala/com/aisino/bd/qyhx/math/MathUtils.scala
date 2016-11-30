@@ -1,5 +1,6 @@
 package com.aisino.bd.qyhx.math
 
+
 /**
  * Created by Kerwin on 16-11-17.
  */
@@ -24,8 +25,34 @@ object MathUtils extends  Serializable{
 		for(i <- 0 until (n - k)){
 			translatedVar += (arr(i) - mean) * (arr(i+k) - mean)
 		}
-		//println(f"translated variance = $translatedVar%.6f")
 		val correlation = (translatedVar / variance).formatted("%.6f").toDouble
 		correlation
 	}
+
+	def getNumDigits(num: Double) : Int = {
+		var n = num.toInt
+		var digits = 1
+		while((n / 10) != 0){
+			n = n / 10
+			digits = digits + 1
+		}
+		digits
+	}
+
+	def getMinMaxOfArray(arr: Array[Any]) : (Double, Double) = {
+		if(arr.length == 0){
+			(0.0, 0.0)
+		}
+		var minValue = arr(0).toString.toDouble
+		var maxValue = arr(0).toString.toDouble
+		for(i <- 0 to arr.length-1){
+			val item = arr(i).toString.toDouble
+			if(item < minValue)
+				minValue = item
+			else if(item > maxValue)
+				maxValue = item
+		}
+		(minValue, maxValue)
+	}
+
 }

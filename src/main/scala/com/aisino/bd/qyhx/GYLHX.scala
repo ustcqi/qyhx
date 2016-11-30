@@ -1,5 +1,7 @@
 package com.aisino.bd.qyhx
 
+import com.aisino.bd.common.AppContext
+import com.aisino.bd.common.DataLoader
 import org.apache.spark.mllib.eigen
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
 import org.apache.spark.mllib.eigen.EigenVec
@@ -17,95 +19,81 @@ class GYLHX(context: AppContext) extends Serializable{
     val sc = context.sc
     val spark = context.spark
 
-    val path = "./data/file/output"
-    import java.io.{File, FileWriter}
-    @transient
-    val pw = new FileWriter(new File(path)) // true / false (default)
-
     def gylhx(nsrHzDF: DataFrame): Unit ={
-        //map(x => x(0).toString.substring(0, 2))
         val nsrByHyDF = nsrHzDF.groupBy("hy_dm").count
-        val reverseNsrDF = nsrHzDF.select("hy_dm", "gf_nsrsbh", "xf_nsrsbh", "xxnje")
-                .toDF("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "xxnje")
+        //nsrByHyDF.printSchema() // hy_dm count
+        val reverseNsrDF = nsrHzDF.select("hy_dm", "gf_nsrsbh", "xf_nsrsbh", "zje").toDF("hy_dm", "xf_nsrsbh", "gf_nsrsbh", "zje")
         val unionNsrDF = nsrHzDF.union(reverseNsrDF)
                 //.filter("xf_nsrsbh = '370303749864951'").show()
 
-        /** Traverse all hy_dm*/
-        nsrByHyDF.collect().slice(0, 2).foreach(x => {
-            println(x.toString)
+        //nsrByHyDF.collect().slice(0, 2).foreach(x => {
+        nsrByHyDF.collect().foreach(x => {
             val hy_dm = x(0).toString
-            pw.write(hy_dm + "\n")
-            pw.flush()
-            /*
-            val tmp1 = unionNsrDF.select("gf_nsrsbh").rdd.map(x => x(0).toString).collect
-            val tmp2 = unionNsrDF.select("xf_nsrsbh").rdd.map(x => x(0).toString).collect
-            val nsrIdxMap = (tmp1 ++ tmp2).toSet.toList.zipWithIndex.toMap
-            */
-
-            val xfNsrDF = unionNsrDF.filter(s"hy_dm = $hy_dm")
-                    .groupBy("hy_dm", "xf_nsrsbh")
-                    .pivot("gf_nsrsbh")
-                    .sum("xxnje")
-                    .cache()
-
-            //xfNsrDF.filter("xf_nsrsbh = ")
-            //println(xfNsrDF.columns, xfNsrDF.schema)
+			//val hy_dm = "6820" //5523 hy_dm
+			val unionNsrFilterDF = unionNsrDF.filter(s"hy_dm == '${hy_dm}'")
+            val tmp1 = unionNsrFilterDF.select("gf_nsrsbh").rdd.map(x => x(0).toString).collect
+            val tmp2 = unionNsrFilterDF.select("xf_nsrsbh").rdd.map(x => x(0).toString).collect
+            val nsrIdxMap = (tmp1 ++ tmp2).toSet.toList.zipWithIndex.toMap.asInstanceOf[Map[String, Int]]
+            val xfNsrDF = unionNsrFilterDF.groupBy("hy_dm", "xf_nsrsbh").pivot("gf_nsrsbh").sum("zje").cache()
             val columns = xfNsrDF.columns.toList
             val gfNsrNum = columns.length - 2
-
-            println(xfNsrDF.sample(false, 0.5).count)
-            println(xfNsrDF.count)
-            val matrixRdd = xfNsrDF.sample(false, 0.1).rdd.map(x => {
-                val idxArr = new ArrayBuffer[Int]()
-                var valueArr = new ArrayBuffer[Double]()
-                for (i <- 2 to gfNsrNum) {
-                    if (x(i) != null) {
-                        idxArr += i
-                        valueArr += x(i).toString.toDouble
-                        //idxArr += nsrIdxMap(columns(i))
-                    }
-                }
-                idxArr.foreach(println)
-                val bsv = new BSV[Double](idxArr.toArray, valueArr.toArray, gfNsrNum)
-                println(bsv)
-                bsv
-            })
-            //k = 1
-            println(matrixRdd.count(), gfNsrNum)
-            val eigenvec = new EigenVec(matrixRdd, gfNsrNum, 1)
-            val ev: BDV[Double] = eigenvec.se
-            print(s"ev length: ${ev.length}, ev = ")
-            ev.foreach(x => pw.write(x.toString + "\t"))
-            pw.write("\n")
-            pw.flush()
+			if(gfNsrNum > 5) {
+				//val matrixRdd = xfNsrDF.sample(false, 0.1).rdd.map(x => {
+				val matrixRdd = xfNsrDF.rdd.map(x => {
+					val nsrsbh = x(1).toString();
+					val idxOfNsr = nsrIdxMap(nsrsbh)
+					val idxArr = new ArrayBuffer[Int]()
+					var valueArr = new ArrayBuffer[Double]()
+					for (i <- 2 to gfNsrNum + 1) {
+						if (x(i) != null) {
+							idxArr += (i - 2)
+							valueArr += x(i).toString.toDouble
+						} else if (i == idxOfNsr) {
+							idxArr += (i - 2)
+							valueArr += 0.001
+						}
+					}
+					//idxArr.foreach(println)
+					val bsv = new BSV[Double](idxArr.toArray, valueArr.toArray, gfNsrNum)
+					bsv
+				})
+				//k = 1
+				val n = matrixRdd.count.toInt
+				//println(n, gfNsrNum)
+				val eigenvec = new EigenVec(matrixRdd, n, 1)
+				val ev: BDV[Double] = eigenvec.se
+				println(s"ev length = ${ev.length}, ev = ${ev}")
+				//calculate the eigenvector bases on eigenvalue and maxtrixRDD
+			}
         })
+
     }
+
 }
 
 object GYLHX {
-    def main(args: Array[String]): Unit ={
+    val usage =
+        """Usage:
+	            args(0): startTime
+			    args(1): endTime
+                args(2): table
+			 example:
+	            201201 201312 dw_bak1.dw_dm_nsr_bq1
+        """.stripMargin.trim
+    def main(args: Array[String]) {
+        if(args.length < 3){
+            println(usage)
+            sys.exit(1)
+        }
+        val startTime = args(0)
+        val endTime = args(1)
+        val tableName = args(2)
+
         val context = new AppContext()
-        /*
+
         val dataLoader = new DataLoader(context)
+        val nsrHzDF = dataLoader.getXfToGfNsrDF(startTime, endTime)
 
-        val xxfpDF = dataLoader.getXXFPData()
-        val jxfpDF = dataLoader.getJXFPData()
-        val nsrDF = dataLoader.getNSRData()
-
-        val ds = new DataSummary(context)
-        val nsrAyHzDF = ds.nsrToNsrAyHz(xxfpDF, jxfpDF, nsrDF)
-        val anDF = ds.nsrToNsrHz(nsrAyHzDF)
-
-        //anDF.write.saveAsTable("nsrHzTable")
-        //anDF.createOrReplaceTempView("nsrHzTable")
-        //anDF.write.save("./data/table/nsrHzTable.parquet")
-        */
-        val nsrHzDF = context.sqlContext.read.load("./data/table/nsrHzTable.parquet")
-        /*
-        val func_hy_dm_substr2 :(String => String) = (arg : String) => arg.substring(0, 2)
-        val udf_hy_dm_substr2 = udf(func_hy_dm_substr2)
-        val nsrHzDF1 = nsrHzDF.withColumn("hy_dm", udf_hy_dm_substr2(col("hy_dm")))
-        */
         val gylhxObj = new GYLHX(context)
         gylhxObj.gylhx(nsrHzDF)
         context.sc.stop()

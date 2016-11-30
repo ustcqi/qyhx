@@ -1,15 +1,15 @@
-package com.aisino.bd.qyhx
+package com.aisino.bd.qyhx.rank
 
-import com.aisino.bd.common.AppContext
 import com.aisino.bd.Utils.{SchemaUtil, DateUtil}
 import com.aisino.bd.common.{DataLoader}
+import com.aisino.bd.common.AppContext
 import org.apache.spark.sql._
 
 /**
   * Created by kerwin on 16/9/26.
   * 行业龙头企业计算
   */
-class HYLT(context: AppContext) extends Serializable{
+class HyltRank(context: AppContext) extends Serializable{
     @transient
     val spark = context.spark
 
@@ -52,7 +52,7 @@ class HYLT(context: AppContext) extends Serializable{
     }
 }
 
-object HYLT{
+object HyltRank{
     val usage =
         """Usage:
 	            args(0): startTime
@@ -78,7 +78,7 @@ object HYLT{
 
         val nsrAyHzDF = dataLoader.getNsrAyHz()
         val hyAyHzDF = dataLoader.getHyAyHz()
-        val hylt = new HYLT(context)
+        val hylt = new HyltRank(context)
         //val hyltDF = hylt.hyLtNsr(nsrAyHzDF, hyAyHzDF)
         val hyltDF = hylt.hyLtNsr(nsrAyHzDF, hyAyHzDF, startTime, endTime, n)
         hyltDF.write.mode("append").saveAsTable(tableName)

@@ -1,4 +1,4 @@
-package com.aisino.bd.qyhx
+package com.aisino.bd.common
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
@@ -21,7 +21,8 @@ class AppContext {
     val spark = SparkSession.builder()
             .appName(appName)
             .enableHiveSupport()
-            .config("spark.some.config.option", "some-value")
+            //.config("spark.some.config.option", "some-value")
+            .config("spark.sql.pivotMaxValues", "5000")
             //.master("local")
             .getOrCreate()
 

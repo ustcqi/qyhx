@@ -1,9 +1,9 @@
 package com.aisino.bd.qyhx
 
-import com.aisino.bd.common.SchemaUtil
-import com.aisino.bd.qyhx.common.DateUtil
+import com.aisino.bd.common.AppContext
+import com.aisino.bd.Utils.{SchemaUtil, DateUtil}
+import com.aisino.bd.common.{DataLoader}
 import org.apache.spark.sql.{Row, DataFrame}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
   * Created by kerwin on 16/9/28.
@@ -14,12 +14,13 @@ class WMQY(context: AppContext) {
     import spark.implicits._
 
     def wmNsr(nsrDF: DataFrame, startTime: String, endTime: String) : DataFrame ={
+
         val currentTime = DateUtil.getCurrentTime()
         val nsrRDD = nsrDF.select("nsrsbh")
-            .rdd.map(x => Row(x(0).toString, 1.toString, 1.toString, endTime, null, currentTime))
+            .rdd.map(x => Row(x(0).toString, 1.toString, 1.toDouble, endTime, null, currentTime))
         val schema = SchemaUtil.nsrBqSchema
-        val ltqyDF = spark.createDataFrame(nsrRDD, schema)
-        ltqyDF
+        val wmNsrDF = spark.createDataFrame(nsrRDD, schema)
+        wmNsrDF
     }
 }
 

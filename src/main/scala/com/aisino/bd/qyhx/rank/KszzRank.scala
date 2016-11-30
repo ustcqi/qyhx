@@ -1,8 +1,9 @@
-package com.aisino.bd.qyhx
+package com.aisino.bd.qyhx.rank
 
-import com.aisino.bd.common.AppContext
 import com.aisino.bd.Utils.{SchemaUtil, DateUtil}
 import com.aisino.bd.common.{DataLoader}
+import com.aisino.bd.common.AppContext
+import com.aisino.bd.ml.SerializableLR
 import com.aisino.bd.qyhx.math.MathUtils
 
 import breeze.numerics.{abs, pow}
@@ -10,6 +11,8 @@ import breeze.numerics.{abs, pow}
 import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.sql.{Row, DataFrame}
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
   * Created by kerwin on 16/9/26.
@@ -28,32 +31,48 @@ import org.apache.spark.sql.{Row, DataFrame}
   *    abs(coefficient) <= 0.1  top minimal 10
   *    coefficient < -0.1, top 10 level=-5, top 20 ~ top 10 level = -4,
   */
-class KSZZ(context: AppContext) extends Serializable{
-    @transient
+class KszzRank(context: AppContext) extends Serializable{
+	@transient
     val sqlContext = context.sqlContext
     val spark = context.spark
 
     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Any]
 
-
-    def getTrainData(arr: Array[Any]): List[(Double, DenseVector)] = {
-        var seq = List[(Double, DenseVector)]()
+/*
+    def getTrainDataDF(arr: Array[Any]): DataFrame = {
+        var list = List[(Double, DenseVector)]()
+		//println(arr)
         val (minValue, maxValue) = MathUtils.getMinMaxOfArray(arr)
         val scale = pow(10, MathUtils.getNumDigits(minValue))
-        for(i <- 0 until arr.length){
+		println(minValue, maxValue, scale)
+        for(i <- 0 to arr.length-1){
             val lirun = arr(i).asInstanceOf[Double]
-            val tmpSeq = List((lirun.formatted("%.3f").toDouble/scale,  new DenseVector(Array(i))))
-            seq = seq ++ tmpSeq
+            val tmpSeq = List((lirun.formatted("%.3f").toDouble/scale,  new DenseVector(Array(i+1))))
+			list = list ++ tmpSeq
         }
-        seq
+		//list
+		val trainingDataDF = sqlContext.createDataFrame(list).toDF("label", "features")
+		trainingDataDF
     }
+	*/
+/*
+	def train(arr: Array[Any]) : Double = {
+        val list = getTrainData(arr)
+		println(context.spark, context.sqlContext)
+		println(list, list.length, list.isEmpty, sqlContext)
+		//spark.stop()
 
-    def train(arr: Array[Any]) : Double = {
-        val seq = getTrainData(arr)
-        val trainingDataDF = sqlContext.createDataFrame(seq).toDF("label", "features")
+		//spark.createDataFrame(list)
+		if(spark == null){
+			println("----------------------------spark is null ---------------------------------")
+		}
+
+        val trainingDataDF = sqlContext.createDataFrame(list).toDF("label", "features")
+		trainingDataDF.show
+
         val lr = new LinearRegression()
             .setMaxIter(1000)
-            .setRegParam(0.2)
+            //.setRegParam(0.2)
             .setLabelCol("label")
             .setFeaturesCol("features")
         val lrModel = lr.fit(trainingDataDF)
@@ -61,7 +80,7 @@ class KSZZ(context: AppContext) extends Serializable{
         val w = coefficients(0)
         w.formatted("%.3f").toDouble
     }
-
+*/
     /**
      * 返回值是一个DF,两列,nsrsbh  level,分别表示纳税人识别号和增长的指标
      *  汇总时日期精确到天,然后groupby按月,sum(lirun)即可 ,备选方案
@@ -80,21 +99,26 @@ class KSZZ(context: AppContext) extends Serializable{
         val lirunDF =  nsrAyHzDF.filter(s"ny >= ${startTime}").filter(s"ny <= ${endTime}").select("nsrsbh", "ny", "xxje")
         val monthNum = lirunDF.select("ny").distinct.count.toDouble.toInt
         val nsrHzDF = lirunDF.orderBy("ny").groupBy("nsrsbh").pivot("ny").mean("xxje")
-		var nsrList = List[(String, Double)]()
-        nsrHzDF.collect().foreach(x => {
+        val nsrXxList = spark.sparkContext.collectionAccumulator[(String, Double)]
+        nsrHzDF.foreach(x => {
             val nsrsbh = x(0).toString
-            val arr =  x.toSeq.toArray.slice(1, monthNum + 1)
-
-            if(! arr.contains(null)){
-                val w = train(arr)
-                //val level = kszzCheck(w)
-                nsrList = nsrList :+ (nsrsbh, w)
+			val arrBuffer = ArrayBuffer[Any]()
+            for(i <- 1 to monthNum){
+				arrBuffer += x(i)
             }
+            val arr = arrBuffer.toArray
+			if(! arr.contains(null)) {
+				val df = SerializableLR.getTrainDataDF(arr, sqlContext)
+				val w = SerializableLR.train(df, sqlContext)
+				nsrXxList.add((nsrsbh, w))
+			}
         })
-		nsrList = nsrList.sortBy(_._2).filter(_._2 > 0.0)
+		val nsrListTmp = nsrXxList.value.toArray().toList.asInstanceOf[List[(String, Double)]]
+
+		var nsrList = nsrListTmp.sortBy(_._2).filter(_._2 > 0.0)
         val len = nsrList.length
         val idx = (len * ratio).toInt
-		if(len > 1) nsrList = nsrList.slice(len - idx - 1, len)
+		if(len > 1) nsrList = nsrList.slice(len-idx-1, len)
         val currentTime = DateUtil.getCurrentTime()
         val rdd =  spark.sparkContext.parallelize(nsrList).map(x => Row(x._1.toString, 2.toString, x._2.toDouble, endTime, null, currentTime))
         val schema = SchemaUtil.nsrBqSchema
@@ -103,7 +127,7 @@ class KSZZ(context: AppContext) extends Serializable{
     }
 }
 
-object  KSZZ{
+object  KszzRank{
     val usage =
         """Usage:
 	            args(0): startTime
@@ -126,7 +150,7 @@ object  KSZZ{
         val context = new AppContext()
         val dataLoader = new DataLoader(context)
         val nsrAyHzDF = dataLoader.getNsrAyHz()
-        val kszz = new KSZZ(context)
+        val kszz = new KszzRank(context)
         val df = kszz.kszzNsr(nsrAyHzDF, startTime, endTime, ratio)
         df.write.mode("append").saveAsTable(tableName)
         context.sc.stop()

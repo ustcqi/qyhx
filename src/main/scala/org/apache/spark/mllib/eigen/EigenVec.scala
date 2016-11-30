@@ -11,9 +11,13 @@ import org.apache.spark.mllib.linalg.EigenValueDecomposition
 class EigenVec(val data: RDD[BSV[Double]], val n: Int, val k: Int) {
     def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
         val vbr = data.context.broadcast(v)
+        //println("data is:")
+        //data.collect().foreach(println)
         data.treeAggregate(BDV.zeros[Double](n))(
             seqOp = (U, rBrz) => {
-                val a = (rBrz.dot(vbr.value))
+                //println("rBrz and vbr.value")
+               // println(rBrz, vbr.value)
+                val a = rBrz.dot(vbr.value)
                 brzAxpy(a, rBrz, U)
                 U
             }, combOp = (U1, U2) => U1 += U2)

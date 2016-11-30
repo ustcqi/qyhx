@@ -1,8 +1,8 @@
-package com.aisino.bd.qyhx
+package com.aisino.bd.qyhx.rank
 
-import com.aisino.bd.common.AppContext
 import com.aisino.bd.Utils.{SchemaUtil, DateUtil}
 import com.aisino.bd.common.{DataLoader}
+import com.aisino.bd.common.AppContext
 import com.aisino.bd.qyhx.math.MathUtils
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types._
@@ -11,14 +11,12 @@ import org.apache.spark.sql.types._
   * Created by kerwin on 16/9/28.
   * 周期性企业计算
   */
-class ZQQY(context: AppContext) {
+class ZqqyRank(context: AppContext) {
     val sqlContext = context.sqlContext
     val spark = context.spark
 
-    val k = List(3, 6, 12)
-
     /**
-     * 取数据时要全年的,例如一年,两年,某月没数据的填
+     * 取数据时要全年的,例如一年,两年,某月没数据的填0
      * @param nsrAyHzDF
      * @param startTime
      * @param endTime
@@ -67,7 +65,7 @@ class ZQQY(context: AppContext) {
     }
 }
 
-object ZQNSR{
+object ZqqyRank{
 
     val usage =
 		"""Usage:
@@ -93,7 +91,7 @@ object ZQNSR{
         val context = new AppContext()
         val dataLoader = new DataLoader(context)
         val nsrAyHzDF = dataLoader.getNsrAyHz()
-        val zqqy = new ZQQY(context)
+        val zqqy = new ZqqyRank(context)
 
         val zqNsrDF = zqqy.zqNsr(nsrAyHzDF, startTime, endTime, k, ratio)
         zqNsrDF.write.mode("append").saveAsTable(tableName)
