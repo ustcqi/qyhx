@@ -22,7 +22,7 @@ class AppContext {
             .appName(appName)
             .enableHiveSupport()
             //.config("spark.some.config.option", "some-value")
-            .config("spark.sql.pivotMaxValues", "5000")
+            .config("spark.sql.pivotMaxValues", "10000")
             //.master("local")
             .getOrCreate()
 

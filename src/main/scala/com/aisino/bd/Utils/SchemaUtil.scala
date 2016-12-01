@@ -14,4 +14,11 @@ object SchemaUtil {
 			:: StructField("bq_end_time", StringType, true)
 			:: StructField("tag_time", StringType, false)
 			:: Nil)
+
+	val gylhxNsrSchema = StructType(
+		StructField("dy_dm", StringType, false)
+			:: StructField("nsrsbh", StringType, false)
+			:: StructField("centrality", DoubleType, false)
+			//:: StructField("edge_number", IntegerType, false)
+			:: Nil)
 }

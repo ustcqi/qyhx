@@ -77,7 +77,7 @@ class DataLoader(context: AppContext){
 
     def getXfToGfNsrAyDF(startTime: String, endTime: String) : DataFrame = {
         val xfToGfNsrAyDF = spark.sql(s"select hy_key as hy_dm, nsr_key as xf_nsrsbh, jy_nsrsbh as gf_nsrsbh, date_key as ny, je " +
-            s"from dw_bak1.dw_agg_nsr_sxygx where date_key >= $startTime and date_key <= $endTime")
+            s"from dw_bak1.dw_agg_nsr_sxygx where date_key >= $startTime and date_key <= $endTime and substr(nsr_key, 1, 2)='36' ")
         xfToGfNsrAyDF
     }
 

@@ -23,8 +23,8 @@ class EigenVec(val data: RDD[BSV[Double]], val n: Int, val k: Int) {
             }, combOp = (U1, U2) => U1 += U2)
     }
 
-    def se : BDV[Double] = {
+    def se : (BDV[Double], BDM[Double]) = {
         val (r1, r2) = EigenValueDecomposition.symmetricEigs(multiplyGramianMatrixBy, n, k, 1e-3, 200)
-        r1
+        (r1, r2)
     }
 }
