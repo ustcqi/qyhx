@@ -29,7 +29,7 @@ class GYLHX(context: AppContext) extends Serializable{
         val unionNsrDF = nsrHzDF.union(reverseNsrDF)
                 //.filter("xf_nsrsbh = '370303749864951'").show()
 		var nsrList = List[(String, Double)]()
-        nsrByHyDF.collect().slice(0, 2).foreach(x => {
+        nsrByHyDF.collect().slice(0, 100).foreach(x => {
         //nsrByHyDF.collect().foreach(x => {
             val hy_dm = x(0).toString
 			//val hy_dm = "6820" //5523 hy_dm
@@ -38,7 +38,7 @@ class GYLHX(context: AppContext) extends Serializable{
             val tmp2 = unionNsrFilterDF.select("xf_nsrsbh").rdd.map(x => x(0).toString).collect
             val nsrIdxMap = (tmp1 ++ tmp2).toSet.toList.zipWithIndex.toMap.asInstanceOf[scala.collection.immutable.Map[String, Int]]
             val xfNsrDF = unionNsrFilterDF.groupBy("hy_dm", "xf_nsrsbh").pivot("gf_nsrsbh").sum("zje").cache()
-			val nsrMatrix = xfNsrDF.rdd.map(x => x.toSeq.toArray).collect() //Array[Array[Any]]
+			val nsrMatrix = xfNsrDF.rdd.map(x => x.toSeq.toArray.slice(2, x.length)).collect()//.asInstanceOf[Array[Array[Double]]] //Array[Array[Any]]
             val columns = xfNsrDF.columns.toList
 			val xf_nsrsbh = columns(1).toString
 
@@ -73,16 +73,16 @@ class GYLHX(context: AppContext) extends Serializable{
 				var centralityMap = Map[String, Double]()
 				columns.slice(2, columns.length).foreach(x =>{
 					val xf_nsrsbh = x.toString
-					val (zje, edgeNumber) = eigenvectorCentrality(nsrMatrix, nsrIdxMap, xf_nsrsbh, eigenvectorMat, columns)
-					val v = eigenvectorMat.apply(nsrIdxMap(xf_nsrsbh), 0)
+					val (zje, edgeNumber) = eigenvectorCentrality(nsrMatrix, eigenvectorMat, nsrIdxMap, xf_nsrsbh, eigenvectorMat, columns)
+					//val v = eigenvectorMat.apply(nsrIdxMap(xf_nsrsbh), 0)
 					//println(eigenvectorMat.apply(0, 1)) //error
 					//println(eigenvectorMat.apply(1, 0)) //correct
-					centralityMap +=  (xf_nsrsbh -> zje*v)
+					centralityMap +=  (xf_nsrsbh -> zje)
 				})
 				val centralityArr = ListMap(centralityMap.toSeq.sortWith(_._2 > _._2):_*).toArray
 				val hynsrList = centralityArr.slice(0, (0.1*centralityArr.length).toInt).toList
 				nsrList = nsrList ++ hynsrList
-				println(nsrList)
+				println(nsrList, "------", nsrList.length)
 			}
         })
 		val currentTime = DateUtil.getCurrentTime()
@@ -92,28 +92,30 @@ class GYLHX(context: AppContext) extends Serializable{
 		df
     }
 
-	def eigenvectorCentrality(nsrMatrix: Array[Array[Any]], nsrIdxMap: scala.collection.immutable.Map[String, Int], nsrsbh: String, eigenvector: BDM[Double], columns: List[String]) : (Double, Integer) = {
+	def eigenvectorCentrality(nsrMatrix: Array[Array[Any]], eigenvectorMat: BDM[Double], nsrIdxMap: scala.collection.immutable.Map[String, Int], nsrsbh: String, eigenvector: BDM[Double], columns: List[String]) : (Double, Integer) = {
 		var zje = 0.0
 		var edgeNumber = 0
 		columns.slice(2, columns.length).foreach(x => {
 			val gf_nsrsbh = x.toString
-			val (connected, je) = isConnected(nsrMatrix, nsrIdxMap, nsrsbh, gf_nsrsbh)
+			val (connected, je) = isConnected(nsrMatrix, eigenvectorMat: BDM[Double], nsrIdxMap, nsrsbh, gf_nsrsbh)
 			if(connected) edgeNumber += 1
 			zje += je
 		})
 		(zje, edgeNumber)
 	}
 
-	def isConnected(nsrMatrix: Array[Array[Any]], nsrIdxMap: scala.collection.immutable.Map[String, Int], nsrFrom: String, nsrTo: String) : (Boolean, Double) = {
+	def isConnected(nsrMatrix: Array[Array[Any]], eigenvectorMat: BDM[Double], nsrIdxMap: scala.collection.immutable.Map[String, Int], nsrFrom: String, nsrTo: String) : (Boolean, Double) = {
 		if(nsrFrom == nsrTo) (false, 0.0)
 
 		val idxFrom = nsrIdxMap(nsrFrom)
 		val idxTo = nsrIdxMap(nsrTo)
 		val je = nsrMatrix(idxFrom)(idxTo)
-		if(je == null) (false, 0.0)
-		(true, je.toString.toDouble)
+		val v = eigenvectorMat.apply(nsrIdxMap(nsrTo), 0)
+		//println("------ ", je, " ------- ", je.asInstanceOf[Double])
+		//if(je.asInstanceOf[Double] == (null:Double))
+		if(je.asInstanceOf[Double].toInt == 0) (false, 0.0)
+		(true, v*je.asInstanceOf[Double])
 	}
-
 }
 
 object GYLHX {
