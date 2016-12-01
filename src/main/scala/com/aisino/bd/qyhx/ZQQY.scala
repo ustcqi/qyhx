@@ -3,7 +3,7 @@ package com.aisino.bd.qyhx
 import com.aisino.bd.common.AppContext
 import com.aisino.bd.Utils.{SchemaUtil, DateUtil}
 import com.aisino.bd.common.{DataLoader}
-import com.aisino.bd.qyhx.math.MathUtils
+import com.aisino.bd.qyhx.mathUtil.MathUtils
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types._
 

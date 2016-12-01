@@ -1,7 +1,8 @@
 package com.aisino.bd.ml
 
 import breeze.numerics._
-import com.aisino.bd.qyhx.math.MathUtils
+import com.aisino.bd.qyhx.mathUtil.MathUtils
+
 import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.sql.{DataFrame, SQLContext}

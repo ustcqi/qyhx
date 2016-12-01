@@ -29,8 +29,8 @@ class GYLHX(context: AppContext) extends Serializable{
         val unionNsrDF = nsrHzDF.union(reverseNsrDF)
                 //.filter("xf_nsrsbh = '370303749864951'").show()
 		var nsrList = List[(String, Double)]()
-        nsrByHyDF.collect().slice(0, 100).foreach(x => {
-        //nsrByHyDF.collect().foreach(x => {
+        //nsrByHyDF.collect().slice(0, 100).foreach(x => {
+        nsrByHyDF.collect().foreach(x => {
             val hy_dm = x(0).toString
 			//val hy_dm = "6820" //5523 hy_dm
 			val unionNsrFilterDF = unionNsrDF.filter(s"hy_dm == '${hy_dm}'")
@@ -38,7 +38,7 @@ class GYLHX(context: AppContext) extends Serializable{
             val tmp2 = unionNsrFilterDF.select("xf_nsrsbh").rdd.map(x => x(0).toString).collect
             val nsrIdxMap = (tmp1 ++ tmp2).toSet.toList.zipWithIndex.toMap.asInstanceOf[scala.collection.immutable.Map[String, Int]]
             val xfNsrDF = unionNsrFilterDF.groupBy("hy_dm", "xf_nsrsbh").pivot("gf_nsrsbh").sum("zje").cache()
-			val nsrMatrix = xfNsrDF.rdd.map(x => x.toSeq.toArray.slice(2, x.length)).collect()//.asInstanceOf[Array[Array[Double]]] //Array[Array[Any]]
+			val nsrMatrix = xfNsrDF.rdd.map(x => x.toSeq.toArray.slice(2, x.length)).collect() //Array[Array[Any]]
             val columns = xfNsrDF.columns.toList
 			val xf_nsrsbh = columns(1).toString
 
@@ -74,13 +74,14 @@ class GYLHX(context: AppContext) extends Serializable{
 				columns.slice(2, columns.length).foreach(x =>{
 					val xf_nsrsbh = x.toString
 					val (zje, edgeNumber) = eigenvectorCentrality(nsrMatrix, eigenvectorMat, nsrIdxMap, xf_nsrsbh, eigenvectorMat, columns)
-					//val v = eigenvectorMat.apply(nsrIdxMap(xf_nsrsbh), 0)
-					//println(eigenvectorMat.apply(0, 1)) //error
-					//println(eigenvectorMat.apply(1, 0)) //correct
+
 					centralityMap +=  (xf_nsrsbh -> zje)
 				})
-				val centralityArr = ListMap(centralityMap.toSeq.sortWith(_._2 > _._2):_*).toArray
-				val hynsrList = centralityArr.slice(0, (0.1*centralityArr.length).toInt).toList
+				//val centralityArr = ListMap(centralityMap.toSeq.sortWith(_._2 > _._2):_*).toArray
+				val centralityArr = centralityMap.toSeq.toArray
+				//val hynsrList = centralityArr.sortBy(_._2).slice(0, (ratio*centralityArr.length).toInt).toList.slice(0, 10)
+				//val hynsrList = centralityArr.sortBy(_._2).slice(0, (ratio*centralityArr.length).toInt).toList.slice(0, 5)
+				val hynsrList = centralityArr.sortBy(_._2).toList.slice(0, 5)
 				nsrList = nsrList ++ hynsrList
 				println(nsrList, "------", nsrList.length)
 			}
@@ -114,7 +115,7 @@ class GYLHX(context: AppContext) extends Serializable{
 		//println("------ ", je, " ------- ", je.asInstanceOf[Double])
 		//if(je.asInstanceOf[Double] == (null:Double))
 		if(je.asInstanceOf[Double].toInt == 0) (false, 0.0)
-		(true, v*je.asInstanceOf[Double])
+		(true, math.abs(v*je.asInstanceOf[Double]))
 	}
 }
 

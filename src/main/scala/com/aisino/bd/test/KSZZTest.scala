@@ -3,7 +3,7 @@ package com.aisino.bd.test
 import breeze.numerics._
 import com.aisino.bd.common.DataLoader
 import com.aisino.bd.common.AppContext
-import com.aisino.bd.qyhx.math.MathUtils
+import com.aisino.bd.qyhx.mathUtil.MathUtils
 import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.regression.LinearRegression
 
